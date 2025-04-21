@@ -112,5 +112,29 @@ namespace torchcs::utils {
     void properties::add_comment(const std::string& key, const std::string& comment) {
         comments_before_key[key] = "# " + comment;
     }
-    
+
+    bool properties::parseBoolean(std::string str) const {
+
+        std::transform(str.begin(), str.end(), str.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+        if(str == "true" || str == "1") {
+            return true;
+        } else if(str == "false" || str == "0") {
+            return false;
+        }
+
+        return false;
+    }
+
+    int properties::parseInt(std::string str) const {
+        return std::stoi(str);
+    }
+
+    float properties::parseFloat(std::string str) const {
+        return std::stof(str);
+    }
+
+    double properties::parseDouble(std::string str) const {
+        return std::stod(str);
+    }
 }
