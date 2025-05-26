@@ -3,9 +3,9 @@
 
 int main() {
 
-    torchcs::utils::properties hello("hello.txt");
+    torchcs::properties hello;
 
-    
+    hello.load_file("hello.properties");
     bool test = hello.parseBoolean("true");
 
     std::cout << test << std::endl;

@@ -5,7 +5,7 @@
 #include <vector>
 #include <utility>
 
-namespace torchcs::utils {
+namespace torchcs {
     class properties {
 
     private:
@@ -15,7 +15,10 @@ namespace torchcs::utils {
         std::filesystem::path file_name;
 
     public:
-        explicit properties(const std::filesystem::path& file_name);
+        void load_file(const std::filesystem::path& path);
+
+        void load_string(const std::string& content);
+        std::string save_to_string() const;
 
         void create();
         void load();
