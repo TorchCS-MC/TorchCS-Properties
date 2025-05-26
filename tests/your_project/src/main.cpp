@@ -24,13 +24,17 @@ test=123
     props.set("new_key", "new_value");
 
     props.add_comment("test", "This is a comment for the test key");
-    props.add_comment("test", "This is a comment for the test key");
+    props.add_comment("test", "This is a comment for the test key cool");
     props.add_comment("test", "This is a comment for the test key");
 
     props.set("#nein", "nein");
     props.set("#hackstest", "456");
     
     props.add_comment("#nein", "das ist ein Kommentar");
+    props.delete_comment("test", 0);
+    props.delete_comment("test", 0);
+    props.delete_comment("test", 0);
+    props.replace_comment("test",99, "DAS IST EIN KOMMENTAR");
 
     std::cout << props.save_to_string() << std::endl;
 

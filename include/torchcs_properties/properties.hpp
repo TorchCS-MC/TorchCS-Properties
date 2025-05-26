@@ -28,6 +28,8 @@ namespace torchcs {
         void clear();
 
         void add_comment(const std::string& key, const std::string& comment);
+        void delete_comment(const std::string &key, size_t index);
+        void replace_comment(const std::string &key, size_t index, const std::string &text);
 
         std::string get_invisible(const std::string& key) const; 
         std::string get(const std::string& key) const;

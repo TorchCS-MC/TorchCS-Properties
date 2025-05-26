@@ -241,6 +241,83 @@ namespace torchcs
                               ordered_entries.end());
     }
 
+    void properties::delete_comment(const std::string &key, size_t index)
+    {
+        auto it = comments_after_key.find(key);
+        if (it == comments_after_key.end())
+            return;
+
+        std::istringstream stream(it->second);
+        std::vector<std::string> lines;
+        std::string line;
+
+        while (std::getline(stream, line))
+        {
+            if (!line.empty())
+                lines.push_back(line);
+        }
+
+        if (index >= lines.size())
+            return;
+
+        lines.erase(lines.begin() + index);
+
+        std::ostringstream rebuilt;
+        for (size_t i = 0; i < lines.size(); ++i)
+        {
+            rebuilt << lines[i];
+            if (i + 1 < lines.size())
+                rebuilt << "\n";
+        }
+
+        if (lines.empty())
+        {
+            comments_after_key.erase(key);
+        }
+        else
+        {
+            comments_after_key[key] = rebuilt.str();
+        }
+    }
+
+    void properties::replace_comment(const std::string &key, size_t index, const std::string &text)
+    {
+        auto it = comments_after_key.find(key);
+        if (it == comments_after_key.end())
+            return;
+
+        std::istringstream stream(it->second);
+        std::vector<std::string> lines;
+        std::string line;
+
+        while (std::getline(stream, line))
+        {
+            if (!line.empty())
+                lines.push_back(line);
+        }
+
+        if (index >= lines.size())
+            return;
+
+        std::string formatted_text = text;
+        if (formatted_text.rfind("#", 0) != 0)
+        {
+            formatted_text = "# " + formatted_text;
+        }
+
+        lines[index] = formatted_text;
+
+        std::ostringstream rebuilt;
+        for (size_t i = 0; i < lines.size(); ++i)
+        {
+            rebuilt << lines[i];
+            if (i + 1 < lines.size())
+                rebuilt << "\n";
+        }
+
+        comments_after_key[key] = rebuilt.str();
+    }
+
     bool properties::has(const std::string &key) const
     {
         return properties_map.find(key) != properties_map.end();
@@ -269,4 +346,4 @@ namespace torchcs
         return std::stod(str);
     }
 
-} 
+}
