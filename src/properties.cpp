@@ -1,8 +1,9 @@
 #include <torchcs_properties/properties.hpp>
 #include <fstream>
-#include <algorithm>
 #include <sstream>
+#include <algorithm>
 #include <unordered_set>
+#include <cctype>
 #include <iostream>
 
 namespace torchcs
@@ -12,7 +13,7 @@ namespace torchcs
     {
         if (!std::filesystem::exists(file_name))
         {
-            std::ofstream file(file_name);
+            std::ofstream(file_name).close();
         }
     }
 
@@ -24,46 +25,109 @@ namespace torchcs
 
     void properties::load()
     {
-        properties_map.clear();
-        ordered_entries.clear();
-        comments_before_key.clear();
-
         if (!std::filesystem::exists(file_name))
             return;
 
         std::ifstream file(file_name);
+        std::stringstream buffer;
+        buffer << file.rdbuf();
+        load_string(buffer.str());
+    }
+
+    void properties::load_string(const std::string &content)
+    {
+        clear();
+
+        std::istringstream stream(content);
         std::string line;
-        std::string last_comment;
+        std::vector<std::string> current_block;
 
-        while (std::getline(file, line))
+        auto flush_block = [&](const std::vector<std::string> &block)
         {
-            if (line.empty())
-                continue;
+            if (block.empty())
+                return;
 
-            if (line[0] == '#')
+            std::string key, value;
+            bool is_invisible = false;
+            std::vector<std::string> comments;
+
+            for (const std::string &l : block)
             {
-                if (!last_comment.empty())
-                    last_comment += "\n";
-                last_comment += line;
-                continue;
-            }
+                std::string trimmed = l;
+                trimmed.erase(0, trimmed.find_first_not_of(" \t\r\n"));
+                trimmed.erase(trimmed.find_last_not_of(" \t\r\n") + 1);
 
-            size_t delimiter_pos = line.find('=');
-            if (delimiter_pos != std::string::npos)
-            {
-                std::string key = line.substr(0, delimiter_pos);
-                std::string value = line.substr(delimiter_pos + 1);
+                if (trimmed.empty())
+                    continue;
 
-                properties_map[key] = value;
-                ordered_entries.emplace_back(key, value);
-
-                if (!last_comment.empty())
+                if (trimmed[0] == '#' && trimmed.find('=') != std::string::npos)
                 {
-                    comments_before_key[key] = last_comment;
-                    last_comment.clear();
+                    std::string line_content = trimmed.substr(1);
+                    size_t eq = line_content.find('=');
+                    if (eq != std::string::npos)
+                    {
+                        key = line_content.substr(0, eq);
+                        value = line_content.substr(eq + 1);
+                        is_invisible = true;
+                    }
+                }
+                else if (trimmed.find('=') != std::string::npos && trimmed[0] != '#')
+                {
+                    size_t eq = trimmed.find('=');
+                    key = trimmed.substr(0, eq);
+                    value = trimmed.substr(eq + 1);
+                    is_invisible = false;
+                }
+                else
+                {
+                    comments.push_back(trimmed);
                 }
             }
+
+            if (!key.empty())
+            {
+                key.erase(0, key.find_first_not_of(" \t"));
+                key.erase(key.find_last_not_of(" \t") + 1);
+                value.erase(0, value.find_first_not_of(" \t"));
+                value.erase(value.find_last_not_of(" \t") + 1);
+
+                ordered_entries.emplace_back(key, value);
+
+                if (is_invisible)
+                {
+                    invisible_properties_map[key] = value;
+                }
+                else
+                {
+                    properties_map[key] = value;
+                }
+
+                if (!comments.empty())
+                {
+                    std::ostringstream comment_text;
+                    for (const auto &c : comments)
+                    {
+                        comment_text << c << "\n";
+                    }
+                    comments_after_key[key] = comment_text.str();
+                }
+            }
+        };
+
+        while (std::getline(stream, line))
+        {
+            if (line.empty())
+            {
+                flush_block(current_block);
+                current_block.clear();
+            }
+            else
+            {
+                current_block.push_back(line);
+            }
         }
+
+        flush_block(current_block);
     }
 
     std::string properties::save_to_string() const
@@ -77,76 +141,30 @@ namespace torchcs
                 continue;
             written_keys.insert(key);
 
-            if (comments_before_key.find(key) != comments_before_key.end())
+            bool is_invisible = invisible_properties_map.find(key) != invisible_properties_map.end();
+            out << (is_invisible ? "# " : "") << key << "=" << value << "\n";
+
+            auto comment_it = comments_after_key.find(key);
+            if (comment_it != comments_after_key.end() && !comment_it->second.empty())
             {
-                out << comments_before_key.at(key) << "\n";
+                std::istringstream comment_stream(comment_it->second);
+                std::string comment_line;
+                while (std::getline(comment_stream, comment_line))
+                {
+                    out << comment_line << "\n";
+                }
             }
 
-            out << key << "=" << value << "\n\n";
+            out << "\n";
         }
 
         return out.str();
     }
 
-    void properties::load_string(const std::string &content)
-    {
-        properties_map.clear();
-        ordered_entries.clear();
-        comments_before_key.clear();
-
-        std::istringstream stream(content);
-        std::string line;
-        std::string last_comment;
-
-        while (std::getline(stream, line))
-        {
-            if (line.empty())
-                continue;
-
-            if (line[0] == '#')
-            {
-                if (!last_comment.empty())
-                    last_comment += "\n";
-                last_comment += line;
-                continue;
-            }
-
-            size_t delimiter_pos = line.find('=');
-            if (delimiter_pos != std::string::npos)
-            {
-                std::string key = line.substr(0, delimiter_pos);
-                std::string value = line.substr(delimiter_pos + 1);
-
-                properties_map[key] = value;
-                ordered_entries.emplace_back(key, value);
-
-                if (!last_comment.empty())
-                {
-                    comments_before_key[key] = last_comment;
-                    last_comment.clear();
-                }
-            }
-        }
-    }
-
     void properties::save()
     {
         std::ofstream file(file_name);
-        std::unordered_set<std::string> written_keys;
-
-        for (const auto &[key, value] : ordered_entries)
-        {
-            if (written_keys.count(key))
-                continue;
-            written_keys.insert(key);
-
-            if (comments_before_key.find(key) != comments_before_key.end())
-            {
-                file << comments_before_key[key] << "\n";
-            }
-
-            file << key << "=" << value << "\n\n";
-        }
+        file << save_to_string();
     }
 
     void properties::remove()
@@ -166,17 +184,28 @@ namespace torchcs
     {
         properties_map.clear();
         ordered_entries.clear();
-        comments_before_key.clear();
+        invisible_properties_map.clear();
+        comments_after_key.clear();
+    }
+
+    void properties::add_comment(const std::string &key, const std::string &comment)
+    {
+        auto &existing = comments_after_key[key];
+        if (!existing.empty())
+            existing += "\n";
+        existing += "# " + comment;
     }
 
     std::string properties::get(const std::string &key) const
     {
         auto it = properties_map.find(key);
-        if (it != properties_map.end())
-        {
-            return it->second;
-        }
-        return {};
+        return it != properties_map.end() ? it->second : "";
+    }
+
+    std::string properties::get_invisible(const std::string &key) const
+    {
+        auto it = invisible_properties_map.find(key);
+        return it != invisible_properties_map.end() ? it->second : "";
     }
 
     void properties::set(const std::string &key, const std::string &value)
@@ -195,18 +224,21 @@ namespace torchcs
         }
 
         properties_map[key] = value;
+        invisible_properties_map.erase(key);
     }
 
     void properties::erase(const std::string &key)
     {
         properties_map.erase(key);
-        comments_before_key.erase(key);
+        invisible_properties_map.erase(key);
+        comments_after_key.erase(key);
 
-        ordered_entries.erase(
-            std::remove_if(ordered_entries.begin(), ordered_entries.end(),
-                           [&key](const auto &pair)
-                           { return pair.first == key; }),
-            ordered_entries.end());
+        ordered_entries.erase(std::remove_if(ordered_entries.begin(), ordered_entries.end(),
+                                             [&key](const auto &pair)
+                                             {
+                                                 return pair.first == key;
+                                             }),
+                              ordered_entries.end());
     }
 
     bool properties::has(const std::string &key) const
@@ -214,32 +246,27 @@ namespace torchcs
         return properties_map.find(key) != properties_map.end();
     }
 
-    void properties::add_comment(const std::string &key, const std::string &comment)
+    bool properties::parseBoolean(const std::string &str) const
     {
-        comments_before_key[key] = "# " + comment;
-    }
-
-    bool properties::parseBoolean(std::string str) const
-    {
-        std::transform(str.begin(), str.end(), str.begin(), [](unsigned char c)
+        std::string lower = str;
+        std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c)
                        { return static_cast<char>(std::tolower(c)); });
-
-        return (str == "true" || str == "1");
+        return (lower == "true" || lower == "1" || lower == "yes");
     }
 
-    int properties::parseInt(std::string str) const
+    int properties::parseInt(const std::string &str) const
     {
         return std::stoi(str);
     }
 
-    float properties::parseFloat(std::string str) const
+    float properties::parseFloat(const std::string &str) const
     {
         return std::stof(str);
     }
 
-    double properties::parseDouble(std::string str) const
+    double properties::parseDouble(const std::string &str) const
     {
         return std::stod(str);
     }
 
-}
+} 

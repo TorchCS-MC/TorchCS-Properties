@@ -4,37 +4,39 @@
 int main()
 {
     const std::string raw_properties = R"(
-# Server Einstellungen
-# Server Einstellungen
-# Server Einstellungen
-# Server Einstellungen
-# Server Einstellungen
-# Server Einstellungen
-# Server Einstellungen
-server-name=Test Server
-# Gamemode Einstellung
-gamemode=creative
-# Maximale Spieler
-max-players=20
+# This is a comment
+# Another comment
+cool=true
+
+# name=TorchCS
+# nameme is cool
+# cool or not?
+
+test=123
 )";
 
     torchcs::properties props;
 
     props.load_string(raw_properties);
+    
 
-    std::string server_name = props.get("server-name");
-    std::string gamemode = props.get("gamemode");
-    int max_players = props.parseInt(props.get("max-players"));
+    props.add_comment("new_key", "This is a comment for the test key");
+    props.set("new_key", "new_value");
 
-    std::cout << "Server Name: " << server_name << std::endl;
-    std::cout << "Gamemode: " << gamemode << std::endl;
-    std::cout << "Max Players: " << max_players << std::endl;
+    props.add_comment("test", "This is a comment for the test key");
+    props.add_comment("test", "This is a comment for the test key");
+    props.add_comment("test", "This is a comment for the test key");
 
-    props.set("level-name", "TestLevel");
-    props.add_comment("level-name", "Welt");
+    props.set("#nein", "nein");
+    props.set("#hackstest", "456");
+    
+    props.add_comment("#nein", "das ist ein Kommentar");
 
-    std::string new_file_content = props.save_to_string();
-    std::cout << new_file_content << std::endl;
+    std::cout << props.save_to_string() << std::endl;
+
+    props.load_file("test.properties");
+    props.save();
+
 
     return 0;
 }
