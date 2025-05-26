@@ -2,6 +2,8 @@
 #include <fstream>
 #include <algorithm>
 #include <sstream>
+#include <unordered_set>
+#include <iostream>
 
 namespace torchcs
 {
@@ -40,7 +42,9 @@ namespace torchcs
 
             if (line[0] == '#')
             {
-                last_comment = line;
+                if (!last_comment.empty())
+                    last_comment += "\n";
+                last_comment += line;
                 continue;
             }
 
@@ -65,22 +69,20 @@ namespace torchcs
     std::string properties::save_to_string() const
     {
         std::ostringstream out;
+        std::unordered_set<std::string> written_keys;
 
-        for (size_t i = 0; i < ordered_entries.size(); ++i)
+        for (const auto &[key, value] : ordered_entries)
         {
-            const auto &[key, value] = ordered_entries[i];
+            if (written_keys.count(key))
+                continue;
+            written_keys.insert(key);
 
             if (comments_before_key.find(key) != comments_before_key.end())
             {
                 out << comments_before_key.at(key) << "\n";
             }
 
-            out << key << "=" << value << "\n";
-
-            if (i < ordered_entries.size() - 1)
-            {
-                out << "\n";
-            }
+            out << key << "=" << value << "\n\n";
         }
 
         return out.str();
@@ -103,7 +105,9 @@ namespace torchcs
 
             if (line[0] == '#')
             {
-                last_comment = line;
+                if (!last_comment.empty())
+                    last_comment += "\n";
+                last_comment += line;
                 continue;
             }
 
@@ -127,24 +131,21 @@ namespace torchcs
 
     void properties::save()
     {
-
         std::ofstream file(file_name);
+        std::unordered_set<std::string> written_keys;
 
-        for (size_t i = 0; i < ordered_entries.size(); ++i)
+        for (const auto &[key, value] : ordered_entries)
         {
-            const auto &[key, value] = ordered_entries[i];
+            if (written_keys.count(key))
+                continue;
+            written_keys.insert(key);
 
             if (comments_before_key.find(key) != comments_before_key.end())
             {
                 file << comments_before_key[key] << "\n";
             }
 
-            file << key << "=" << value << "\n";
-
-            if (i < ordered_entries.size() - 1)
-            {
-                file << "\n";
-            }
+            file << key << "=" << value << "\n\n";
         }
     }
 
@@ -164,6 +165,8 @@ namespace torchcs
     void properties::clear()
     {
         properties_map.clear();
+        ordered_entries.clear();
+        comments_before_key.clear();
     }
 
     std::string properties::get(const std::string &key) const
@@ -178,24 +181,32 @@ namespace torchcs
 
     void properties::set(const std::string &key, const std::string &value)
     {
-        properties_map[key] = value;
-
-        auto it = std::find_if(ordered_entries.begin(), ordered_entries.end(), [&key](const auto &pair)
+        auto it = std::find_if(ordered_entries.begin(), ordered_entries.end(),
+                               [&key](const auto &pair)
                                { return pair.first == key; });
 
-        if (it == ordered_entries.end())
-        {
-            ordered_entries.emplace_back(key, value);
-        }
-        else
+        if (it != ordered_entries.end())
         {
             it->second = value;
         }
+        else
+        {
+            ordered_entries.emplace_back(key, value);
+        }
+
+        properties_map[key] = value;
     }
 
     void properties::erase(const std::string &key)
     {
         properties_map.erase(key);
+        comments_before_key.erase(key);
+
+        ordered_entries.erase(
+            std::remove_if(ordered_entries.begin(), ordered_entries.end(),
+                           [&key](const auto &pair)
+                           { return pair.first == key; }),
+            ordered_entries.end());
     }
 
     bool properties::has(const std::string &key) const
@@ -210,20 +221,10 @@ namespace torchcs
 
     bool properties::parseBoolean(std::string str) const
     {
-
         std::transform(str.begin(), str.end(), str.begin(), [](unsigned char c)
                        { return static_cast<char>(std::tolower(c)); });
 
-        if (str == "true" || str == "1")
-        {
-            return true;
-        }
-        else if (str == "false" || str == "0")
-        {
-            return false;
-        }
-
-        return false;
+        return (str == "true" || str == "1");
     }
 
     int properties::parseInt(std::string str) const
@@ -240,4 +241,5 @@ namespace torchcs
     {
         return std::stod(str);
     }
+
 }
