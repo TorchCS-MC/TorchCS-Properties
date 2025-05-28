@@ -3,12 +3,12 @@
 #include <sstream>
 #include <algorithm>
 #include <unordered_set>
+#include <unordered_map>
 #include <cctype>
 #include <iostream>
 
 namespace torchcs
 {
-
     void properties::create()
     {
         if (!std::filesystem::exists(file_name))
@@ -37,128 +37,110 @@ namespace torchcs
     void properties::load_string(const std::string &content)
     {
         clear();
-
         std::istringstream stream(content);
         std::string line;
-        std::vector<std::string> current_block;
-
-        auto flush_block = [&](const std::vector<std::string> &block)
-        {
-            if (block.empty())
-                return;
-
-            std::string key, value;
-            bool is_invisible = false;
-            std::vector<std::string> comments;
-
-            for (const std::string &l : block)
-            {
-                std::string trimmed = l;
-                trimmed.erase(0, trimmed.find_first_not_of(" \t\r\n"));
-                trimmed.erase(trimmed.find_last_not_of(" \t\r\n") + 1);
-
-                if (trimmed.empty())
-                    continue;
-
-                if (trimmed[0] == '#' && trimmed.find('=') != std::string::npos)
-                {
-                    std::string line_content = trimmed.substr(1);
-                    size_t eq = line_content.find('=');
-                    if (eq != std::string::npos)
-                    {
-                        key = line_content.substr(0, eq);
-                        value = line_content.substr(eq + 1);
-                        is_invisible = true;
-                    }
-                }
-                else if (trimmed.find('=') != std::string::npos && trimmed[0] != '#')
-                {
-                    size_t eq = trimmed.find('=');
-                    key = trimmed.substr(0, eq);
-                    value = trimmed.substr(eq + 1);
-                    is_invisible = false;
-                }
-                else
-                {
-                    comments.push_back(trimmed);
-                }
-            }
-
-            if (!key.empty())
-            {
-                key.erase(0, key.find_first_not_of(" \t"));
-                key.erase(key.find_last_not_of(" \t") + 1);
-                value.erase(0, value.find_first_not_of(" \t"));
-                value.erase(value.find_last_not_of(" \t") + 1);
-
-                ordered_entries.emplace_back(key, value);
-
-                if (is_invisible)
-                {
-                    invisible_properties_map[key] = value;
-                }
-                else
-                {
-                    properties_map[key] = value;
-                }
-
-                if (!comments.empty())
-                {
-                    std::ostringstream comment_text;
-                    for (const auto &c : comments)
-                    {
-                        comment_text << c << "\n";
-                    }
-                    comments_after_key[key] = comment_text.str();
-                }
-            }
-        };
 
         while (std::getline(stream, line))
         {
-            if (line.empty())
+            raw_lines.push_back(line);
+
+            std::string trimmed = trim(line);
+
+            if (trimmed.empty() || trimmed[0] == '#')
+                continue;
+
+            std::string prop = get_property_and_value(trimmed);
+            if (prop.empty())
+                continue;
+
+            size_t equal_pos = prop.find('=');
+            if (equal_pos != std::string::npos)
             {
-                flush_block(current_block);
-                current_block.clear();
-            }
-            else
-            {
-                current_block.push_back(line);
+                std::string key = trim(prop.substr(0, equal_pos));
+                std::string value = trim(prop.substr(equal_pos + 1));
+                set(key, value);
             }
         }
-
-        flush_block(current_block);
     }
 
     std::string properties::save_to_string() const
     {
         std::ostringstream out;
-        std::unordered_set<std::string> written_keys;
-
-        for (const auto &[key, value] : ordered_entries)
+        for (const std::string &line : raw_lines)
         {
-            if (written_keys.count(key))
-                continue;
-            written_keys.insert(key);
-
-            bool is_invisible = invisible_properties_map.find(key) != invisible_properties_map.end();
-            out << (is_invisible ? "# " : "") << key << "=" << value << "\n";
-
-            auto comment_it = comments_after_key.find(key);
-            if (comment_it != comments_after_key.end() && !comment_it->second.empty())
+            std::string trimmed = trim(line);
+            if (trimmed.empty() || trimmed[0] == '#')
             {
-                std::istringstream comment_stream(comment_it->second);
-                std::string comment_line;
-                while (std::getline(comment_stream, comment_line))
+                out << line << "\n";
+                continue;
+            }
+
+            size_t equal_pos = trimmed.find('=');
+            if (equal_pos != std::string::npos)
+            {
+                std::string key = trim(trimmed.substr(0, equal_pos));
+                auto it = props_map.find(key);
+                if (it != props_map.end())
                 {
-                    out << comment_line << "\n";
+                    out << key << "=" << it->second << "\n";
+                    continue;
                 }
             }
 
-            out << "\n";
+            out << line << "\n";
         }
 
         return out.str();
+    }
+
+    std::string properties::get_property_and_value(const std::string &data) const
+    {
+        std::string n_data = scann_next_block_in_line_and_slice(data);
+
+        if (n_data.length() < 3 || n_data.empty())
+            return "";
+
+        size_t equal_pos = n_data.find('=');
+        if (equal_pos == std::string::npos)
+            return "";
+
+        std::string key = trim(n_data.substr(0, equal_pos));
+        std::string value = trim(n_data.substr(equal_pos + 1));
+
+        return key + "=" + value;
+    }
+
+    std::string properties::scann_next_block_in_line_and_slice(const std::string &line) const
+    {
+        size_t start = line.find_first_not_of(" \t\r\n");
+        if (start == std::string::npos)
+            return "";
+
+        size_t equal_pos = line.find('=', start);
+        if (equal_pos == std::string::npos)
+            return "";
+
+        std::string key = trim(line.substr(start, equal_pos - start));
+        size_t after_eq = equal_pos + 1;
+
+        if (after_eq >= line.size())
+            return key + "=";
+
+        if (std::isspace(static_cast<unsigned char>(line[after_eq])))
+            return "";
+
+        return trim(line.substr(start));
+    }
+
+    inline std::string properties::trim(const std::string &s) const
+    {
+        size_t start = s.find_first_not_of(" \t\r\n");
+        size_t end = s.find_last_not_of(" \t\r\n");
+
+        if (start == std::string::npos || end == std::string::npos)
+            return "";
+
+        return s.substr(start, end - start + 1);
     }
 
     void properties::save()
@@ -182,168 +164,58 @@ namespace torchcs
 
     void properties::clear()
     {
-        properties_map.clear();
-        ordered_entries.clear();
-        invisible_properties_map.clear();
-        comments_after_key.clear();
-    }
-
-    void properties::add_comment(const std::string &key, const std::string &comment)
-    {
-        auto &existing = comments_after_key[key];
-        if (!existing.empty())
-            existing += "\n";
-        existing += "# " + comment;
+        props_map.clear();
     }
 
     std::string properties::get(const std::string &key) const
     {
-        auto it = properties_map.find(key);
-        return it != properties_map.end() ? it->second : "";
-    }
-
-    std::string properties::get_invisible(const std::string &key) const
-    {
-        auto it = invisible_properties_map.find(key);
-        return it != invisible_properties_map.end() ? it->second : "";
+        auto it = props_map.find(key);
+        return it != props_map.end() ? it->second : "";
     }
 
     void properties::set(const std::string &key, const std::string &value)
     {
-        auto it = std::find_if(ordered_entries.begin(), ordered_entries.end(),
-                               [&key](const auto &pair)
-                               { return pair.first == key; });
-
-        if (it != ordered_entries.end())
-        {
-            it->second = value;
-        }
-        else
-        {
-            ordered_entries.emplace_back(key, value);
-        }
-
-        properties_map[key] = value;
-        invisible_properties_map.erase(key);
+        props_map[key] = value;
     }
 
     void properties::erase(const std::string &key)
     {
-        properties_map.erase(key);
-        invisible_properties_map.erase(key);
-        comments_after_key.erase(key);
-
-        ordered_entries.erase(std::remove_if(ordered_entries.begin(), ordered_entries.end(),
-                                             [&key](const auto &pair)
-                                             {
-                                                 return pair.first == key;
-                                             }),
-                              ordered_entries.end());
-    }
-
-    void properties::delete_comment(const std::string &key, size_t index)
-    {
-        auto it = comments_after_key.find(key);
-        if (it == comments_after_key.end())
-            return;
-
-        std::istringstream stream(it->second);
-        std::vector<std::string> lines;
-        std::string line;
-
-        while (std::getline(stream, line))
-        {
-            if (!line.empty())
-                lines.push_back(line);
-        }
-
-        if (index >= lines.size())
-            return;
-
-        lines.erase(lines.begin() + index);
-
-        std::ostringstream rebuilt;
-        for (size_t i = 0; i < lines.size(); ++i)
-        {
-            rebuilt << lines[i];
-            if (i + 1 < lines.size())
-                rebuilt << "\n";
-        }
-
-        if (lines.empty())
-        {
-            comments_after_key.erase(key);
-        }
-        else
-        {
-            comments_after_key[key] = rebuilt.str();
-        }
-    }
-
-    void properties::replace_comment(const std::string &key, size_t index, const std::string &text)
-    {
-        auto it = comments_after_key.find(key);
-        if (it == comments_after_key.end())
-            return;
-
-        std::istringstream stream(it->second);
-        std::vector<std::string> lines;
-        std::string line;
-
-        while (std::getline(stream, line))
-        {
-            if (!line.empty())
-                lines.push_back(line);
-        }
-
-        if (index >= lines.size())
-            return;
-
-        std::string formatted_text = text;
-        if (formatted_text.rfind("#", 0) != 0)
-        {
-            formatted_text = "# " + formatted_text;
-        }
-
-        lines[index] = formatted_text;
-
-        std::ostringstream rebuilt;
-        for (size_t i = 0; i < lines.size(); ++i)
-        {
-            rebuilt << lines[i];
-            if (i + 1 < lines.size())
-                rebuilt << "\n";
-        }
-
-        comments_after_key[key] = rebuilt.str();
+        props_map.erase(key);
     }
 
     bool properties::has(const std::string &key) const
     {
-        return properties_map.find(key) != properties_map.end();
+        return props_map.find(key) != props_map.end();
     }
 
-    bool properties::parseBoolean(const std::string &str) const
+    bool properties::parseBoolean(const std::string &key) const
     {
-        std::string lower = str;
-        std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c)
-                       { return static_cast<char>(std::tolower(c)); });
-        return (lower == "true" || lower == "1" || lower == "yes");
+        std::string lower;
+        for (char c : this->get(key))
+            lower += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+
+        if (lower == "true" || lower == "1" || lower == "yes" || lower == "on")
+            return true;
+
+        if (lower == "false" || lower == "0" || lower == "no" || lower == "off")
+            return false;
+
+        return false;
     }
 
-    int properties::parseInt(const std::string &str) const
+    int properties::parseInt(const std::string &key) const
     {
-        return std::stoi(str);
+        return std::stoi(this->get(key));
     }
 
-    float properties::parseFloat(const std::string &str) const
+    float properties::parseFloat(const std::string &key) const
     {
-        return std::stof(str);
+        return std::stof(this->get(key));
     }
 
-    double properties::parseDouble(const std::string &str) const
+    double properties::parseDouble(const std::string &key) const
     {
-        return std::stod(str);
+        return std::stod(this->get(key));
     }
 
 }

@@ -1,46 +1,27 @@
 #include <torchcs_properties/properties.hpp>
 #include <iostream>
 
+
+std::string properties() {
+    return R"(
+name=Test
+#This is a test
+
+version=1.0.0
+#this is a version
+    )";
+}
+
 int main()
 {
-    const std::string raw_properties = R"(
-# This is a comment
-# Another comment
-cool=true
-
-# name=TorchCS
-# nameme is cool
-# cool or not?
-
-test=123
-)";
-
     torchcs::properties props;
 
-    props.load_string(raw_properties);
-    
+    props.load_file("server.properties");
+    props.set("server-name", "TorchCS");
 
-    props.add_comment("new_key", "This is a comment for the test key");
-    props.set("new_key", "new_value");
+    std::cout << props.parseInt("max-players") << std::endl;
 
-    props.add_comment("test", "This is a comment for the test key");
-    props.add_comment("test", "This is a comment for the test key cool");
-    props.add_comment("test", "This is a comment for the test key");
-
-    props.set("#nein", "nein");
-    props.set("#hackstest", "456");
-    
-    props.add_comment("#nein", "das ist ein Kommentar");
-    props.delete_comment("test", 0);
-    props.delete_comment("test", 0);
-    props.delete_comment("test", 0);
-    props.replace_comment("test",99, "DAS IST EIN KOMMENTAR");
-
-    std::cout << props.save_to_string() << std::endl;
-
-    props.load_file("test.properties");
     props.save();
-
 
     return 0;
 }
