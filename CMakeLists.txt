@@ -1,5 +1,5 @@
-cmake_minimum_required(VERSION 3.29.3)
-project(torchcs_properties VERSION 1.0.0 LANGUAGES CXX)
+cmake_minimum_required(VERSION 3.15)
+project(torchcs_properties)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -8,7 +8,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 option(TORCHCS_PROPERTIES_INSTALL "Enable installation of torchcs_properties" ON)
 option(TORCHCS_PROPERTIES_SHARED "Build torchcs_properties as a shared library (.so/.dll)" OFF)
 option(TORCHCS_PROPERTIES_STATIC "Build torchcs_properties as a static library (.a/.lib)" ON)
-option(BUILD_EXAMPLE "Build example project in tests/your_project" OFF)
+option(BUILD_EXAMPLE "Build example project in sample" OFF)
 
 set(SOURCES
     src/properties.cpp
@@ -26,7 +26,13 @@ else()
     message(FATAL_ERROR "You must enable either shared or static build.")
 endif()
 
-target_include_directories(torchcs_properties PUBLIC include)
+add_library(torchcs::properties ALIAS torchcs_properties)
+
+target_include_directories(torchcs_properties
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include>
+)
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     target_compile_options(torchcs_properties PRIVATE -Wall -Wextra -Wpedantic -Werror)
@@ -35,7 +41,7 @@ elseif(MSVC)
 endif()
 
 if(BUILD_EXAMPLE)
-    add_subdirectory(tests/your_project)
+    add_subdirectory(sample)
 endif()
 
 if(TORCHCS_PROPERTIES_INSTALL)
@@ -47,4 +53,9 @@ if(TORCHCS_PROPERTIES_INSTALL)
         INCLUDES DESTINATION include
     )
     install(DIRECTORY include/ DESTINATION include)
+    install(EXPORT torchcs_propertiesTargets
+        FILE torchcs_propertiesTargets.cmake
+        NAMESPACE torchcs::
+        DESTINATION lib/cmake/torchcs_properties
+    )
 endif()

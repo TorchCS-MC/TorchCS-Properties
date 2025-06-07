@@ -1,4 +1,4 @@
-#include <torchcs_properties/properties.hpp>
+#include <torchcs/properties/properties.hpp>
 #include <fstream>
 #include <sstream>
 #include <algorithm>

@@ -1,4 +1,4 @@
-#include <torchcs_properties/properties.hpp>
+#include <torchcs/properties/properties.hpp>
 #include <iostream>
 
 
@@ -16,10 +16,12 @@ int main()
 {
     torchcs::properties props;
 
-    props.load_file("server.properties");
-    props.set("server-name", "TorchCS");
+    if(!props.exists()) {
+        props.create();
+    }
 
-    std::cout << props.parseInt("max-players") << std::endl;
+    props.load_file("server.properties");
+    props.load_string(properties());
 
     props.save();
 
